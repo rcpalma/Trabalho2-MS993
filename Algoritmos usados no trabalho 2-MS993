@@ -1,0 +1,269 @@
+import numpy as np
+
+#sempre use matrizes com entradas tipo float. O algoritmo nao funciona para matrizes Cnxm se n ou m é primo, por design.
+
+def modulo(x):
+    if x>=0:
+        return x
+    else:
+        return -x
+    
+
+def norma_2(v):    #norma euclidiana
+    a=0
+    for i in range(len(v)):
+        a=a+(v[i])**2
+    a=a**(1/2)
+    return a
+    
+def QR(A):
+    R=A.copy()                         #copia A para nao alterá-la
+                            
+    Q1=np.identity(len(R))
+    for i in range(len(R[0])):
+        a=norma_2(R[i:,i])             # calcula o tau_i
+        if a==0:                        
+            x=0
+        else:
+            if R[i,i]<0:                # tau_i fica com o mesmo sinal de aii
+                a=-a
+            else:
+                a=a
+            R[i+1:,i]=R[i+1:,i]/(a+R[i,i])  # faz a divisao da coluna i por tau+aii
+                                            # a partir de aii(sem contar aii)
+                
+            c=R[i,i]                               # c  <-  aii
+            R[i,i]=-a                              # aii  <-  -tau 
+            a=0
+            x=0
+            x=(c-R[i,i])/-R[i,i]                   # gamma_i=(aii+tau)/(+tau)
+
+            u=R[i:,i].copy()           # pega a i-ésima coluna a partir da diagonal
+                                       # (que é justamente u_i)
+            u[0]=1
+            u=np.reshape(u,(len(u),1))
+            Q=np.identity(len(R)-i)-x*np.dot(u,np.transpose(u))   # calcula Q_i
+            R[i:,i+1:]=np.dot(Q,R[i:,i+1:])                       # faz Q_iA
+
+            Q1[0:,i:]=np.dot(Q1[0:,i:],Q)               # calcula Q1.Q2...Qn-1
+            R[i+1:,i]=np.zeros((len(R)-i-1))            # Retira os elementos que sabemos ser 0 
+        
+    return Q1,R                                  #retorna Q e R onde A=QR
+
+def teste_convergencia(A,A1):         # Teste de parada do algoritmo diag
+    n=len(A)
+    c=0
+    for i in range(n):
+        c=c+modulo(A[i,i]-A1[i,i])
+    return c
+    
+def simetrica(A):                      # dado A, retorna A simetrica copiando os
+    for i in range(len(A)-1):          # valores acima da diagonal para baixo.
+        for j in range(i+1,len(A[0])):
+            A[j,i]=A[i,j]
+    return A
+
+
+def diag(A):                        #faz a diagonalização de A com o algoritmo 1 do trabalho
+    n=len(A)                         #ja pressupõe A simétrica
+    m=len(A[0])
+    U=np.identity(n)
+    A1=np.zeros((n,n))
+    a,i=0,0
+    while a!=1 and i<200:      # Faz o loop abaixo até convergir ou 200 iteracoes
+
+        Q,R=QR(A)                     #calcula Q,R da matriz A
+        
+        A=np.dot(R,Q)                 # A  <-  RQ
+        U=np.dot(U,Q)                 # U  <-  UQ
+        i=i+1
+        if teste_convergencia(A,A1)<10**(-16):
+            a=1
+        A1=A
+    C=[]                              
+    for i in range(len(A)):
+        C.append(A[i,i])              # como A contem os autovalores de A, os armazena na lista C
+    
+    return U,C                        # retorna os autovetores (U) e os autovalores(C) de A
+
+def SVD_condensed_lento(A):
+    m,n=len(A),len(A[0])
+    C=np.dot(A,np.transpose(A))              #calcula AA^T
+    U,E=diag(C)                              #diagonaliza a matriz AA^T
+    s=0
+    for i in range(len(E)):               # em tese todos os valores de E[i] sao positivos ou 0
+        E[i]=modulo(E[i])                 # mas como podemos ter valores como -10**(-16) ou menores
+                                          # estes sao definidos como 0 para evitar erro na raiz
+                
+        if E[i]<10**(-10):                 # retira os valores singulares que sao provaveis serem 0
+            s=1                            
+            r=i
+            break
+        E[i]=E[i]**(1/2)                  # calcula os valores singulares da matriz A a partir
+    if s==0:                              # dos autovalores nao nulos da matriz AA^T
+        r=len(E)
+    else:
+        if r==0:
+            r=1
+
+    D=np.zeros((r,r))                         # r é o posto da matriz A
+    for i in range(r):                
+        D[i,i]=E[i]                           #D é a matriz dos valores singulares
+    
+    V=np.dot(np.transpose(A),U)               # calcula v_i=sigma^(-1)A^Tu_i de maneira vetorial
+    
+    U=U[:,0:r]                                # obtem U e V na forma condensada 
+    V=V[:,0:r]                                # como descrito no watkins
+    
+    for i in range(len(V[0])):
+        if E[i]!=0:
+            
+            V[0:,i]=V[0:,i]/E[i]               
+    V=np.transpose(V)                         # coloca a matriz V na forma V^T
+    
+    return U,D,V                              # retorna UDV^T=A
+
+def divisores(n):            # dado n, retorna um lista com todos os divisores de n
+    lista=[]
+    i=2
+    while i<n:
+        if n%i==0:
+            lista.append(i)
+        i=i+1
+    return lista
+    
+def pares(lista1,lista2):                  # adiciona todos os pares(a_i,b_j) dos elementos
+    lista3=[]                              # das listas1 e 2 na lista3
+    for i in range(len(lista1)):
+        for j in range(len(lista2)):
+            a=(lista1[i],lista2[j])
+            lista3.append(a)
+            
+    return lista3
+
+def todas_possibilidades(m,n):
+    lista4=[]
+    lista1=divisores(m)                # todos os divisores de m
+    lista2=divisores(n)                # todos os divisores de n
+    lista3=pares(lista1,lista2)        # todos os possiveis pares de divisores(a_i,b_j)
+    
+    for i in range(len(lista3)):
+        for j in range(len(lista3)): 
+            a=lista3[i][0]*lista3[j][0]
+            b=lista3[i][1]*lista3[j][1]
+            if a==m and b==n:                            # filtra so os pares que satisfazem
+                lista4.append((lista3[i],lista3[j]))     #ai*aj=m e bi*bj=n
+
+    return lista4                                        # retorna todas as possibilidades
+
+
+def flat(A):                # faz a vetorização de uma matriz segundo a ordenação do trabalho
+    m,n=len(A),len(A[0])       
+    B=np.zeros((m*n,1))
+    for i in range(n):
+        for j in range(m):
+
+            B[j+m*i][0]=A[j,i]
+
+    return B
+
+
+def mi(C):
+    m,n=len(C),len(C[0])
+    tp=todas_possibilidades(m,n)
+    resp={}
+    for i in range(len(tp)):   # faz o loop sobre todas as possibilidades
+        p,q,r,s=tp[i][0][0],tp[i][1][0],tp[i][0][1],tp[i][1][1]        # se m=pq e n=rs
+        
+        D1=np.zeros((q*s,1))        # D1 vai ser a vetorizacao de um bloco qs de C
+        
+        for j1 in range(r):         # anda por todos os blocos qs de C, são n/s=r "blocos" nas
+            for i1 in range(p):     # colunas e m/q=p "blocos" nas linhas totalizando p*r blocos
+                       
+                D=flat(C[q*(i1):q*(i1+1),s*(j1):s*(j1+1)])    #faz a vetorização dos blocos de C
+            
+                D1=np.concatenate([D1,D],axis=1)     # concatena para formar C=(C11,C12,...,Cpr)
+            
+        D1=D1[0:,1:]                            # tira a primeira coluna que foi so pra auxiliar
+
+        D1=np.transpose(D1)                       # transpõe
+        
+        U,D,V=SVD_condensed_lento(D1)    # a resposta é dada por u, v^T vetores associados ao maior
+                                         # valor singular sigma de D1(teorema Eckart-Young-Mirsky)
+        
+        
+        B=np.zeros((q,s))         # temos u e v, agora precisamos reconstruir
+        A=np.zeros((p,r))         # as matrizes A e B desfazendo a vetorizacao
+
+        for j2 in range(r):                              #desfaz a vetorizacao em A
+            for i2 in range(p):                          
+                A[i2,j2]=(D[0,0])**(1/2)*U[i2+j2*p,0]
+                
+        for j3 in range(s):                             #desfaz a vetorizacao em B
+            for i3 in range(q):
+                        
+                B[i3,j3]=(D[0,0])**(1/2)*V[0,i3+j3*q]
+            
+                                        # agora que sabemos quais matrizes fazem mi(C) ser mínimo
+                                        #basta calcular C-AxB e depois calcular a norma
+        C1=np.zeros((m,n))
+        for i4 in range(len(A)):                    #calcula o produto de kronecker C1=AxB
+            for j4 in range(len(A[0])):
+                
+                C1[i4*len(B):(i4+1)*len(B),j4*len(B[0]):(j4+1)*len(B[0])]=A[i4,j4]*B
+
+        R1=C-C1                            # Faz R1=C-C1=C-AxB
+        
+        U1,D1,V1=SVD_condensed_lento(R1)   # calcula a norma 2 de R1 que é
+                                           # o maior valor singular de R1
+            
+        resp[D1[0,0]]=[A,B]                # salva as possibilidade em um dicionario onde mi_i
+                                           # é a chave e as matrizes [A,B] são o valor
+    
+    r=min(resp.keys())                     # ao final acha a que tem menor chave
+
+    
+    return r,resp[r][0],resp[r][1]         # retorna o menor mi e as respectivas matrizes A e B
+
+
+def product_kronecker():
+    m=np.random.randint(2,6)           # m, n, r e s recebem um inteiro de 2 até 5(aleatório)
+    n=np.random.randint(2,6)           # esses valores podem ser alterados
+    r=np.random.randint(2,6)
+    s=np.random.randint(2,6)
+
+    A=np.random.rand(m,n).astype(float)          # matriz A aleatoria com dimensoes mxn
+    B=np.random.rand(r,s).astype(float)          # matriz B aleatoria com dimensoes rxs
+    C=np.zeros((m*r,n*s))                        # C é iniciada com as dimensões corretas
+
+    for i1 in range(len(A)):                       #calcula o produto de kronecker C=AxB
+            for j1 in range(len(A[0])):
+    
+                C[i1*len(B):(i1+1)*len(B),j1*len(B[0]):(j1+1)*len(B[0])]=A[i1,j1]*B
+    
+    return C,A,B           # retorna C, A e B 
+
+def norma_matriz(A,B):    # calcula a norma do infinito da diferença de A e B
+    C=A-B                 # vai conferir se as matrizes são iguais
+    b=0
+    for i in range(len(C)):
+        a=0
+        for j in range(len(C[0])):
+            a=a+modulo(C[i,j])
+        b=max(b,a)
+    return b
+
+#m=int(input("digite um numero"))
+#n=int(input("digite um numero "))
+#A=np.random.rand(m,n).astype(float)
+
+
+C=np.array([[2,4,3,6],[2,6,3,9],[6,-2,9,-3],[1,2,-1,-2],[1,3,-1,-3],[3,-1,-3,1]]).astype(float)
+#C=np.array([[ 2, -1,  5, -2,  1, -5],[ 3 , 2,  2, -3, -2, -2,],[ 4, -2, 10,  6, -3, 15,],[ 6,  4,  4,  9,  6,  6,],[ 2, -1,  5, 10, -5, 25,],[ 3,  2,  2, 15, 10, 10]]).astype(float)
+print(C,"= C")
+print()
+r,A1,B1=mi(C)
+print("mi(C)=  ",r,"\n\n",A1,"= A","\n\n",B1,"= B")
+print()
+x=2/A1[0,0]                           
+print(x*A1,"= A","\n\n",1/x *B1,"= B")
